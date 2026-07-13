@@ -72,11 +72,11 @@ test('every analytics module opens its matching actionable workspace',async({pag
   }
 });
 
-test('each management decision logs the selected action',async({page})=>{
+test('each management decision shows the selected practice action',async({page})=>{
   await page.goto('/manager');
   for(const action of ['Reallocate stock','Expedite open PO','Offer substitute','Escalate revenue risk']){
     await page.getByRole('button',{name:new RegExp(action)}).click();
-    await expect(page.getByText(`Decision logged: ${action}`)).toBeVisible();
+    await expect(page.getByText(`Action selected: ${action}`)).toBeVisible();
   }
 });
 
@@ -92,6 +92,44 @@ test('an unlocked reward can be activated and reports saved status',async({page,
   await page.getByRole('button',{name:'ACTIVATE',exact:true}).first().click();
   await expect(page.getByRole('status')).toContainText('activated and saved');
   await expect(page.getByRole('button',{name:'ACTIVATED',exact:true}).first()).toBeDisabled();
+});
+
+test('mission correction result does not claim that the next mission unlocked',async({page})=>{
+  await page.route('**/api/missions/*/complete',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({mission:{id:1,status:'needs-correction',score:60}})}));
+  await page.goto('/mission?mission=1');
+  await page.getByLabel('Self-check score').fill('60');
+  await page.getByPlaceholder(/What did the evidence/).fill('The evidence needs another pass before this work is defensible.');
+  await page.getByRole('button',{name:/SUBMIT EVIDENCE|RESUBMIT EVIDENCE/}).click();
+  await expect(page.getByRole('status')).toContainText('Mission recorded for correction');
+  await expect(page.getByRole('status')).not.toContainText('next mission');
+});
+
+test('attention-queue exceptions navigate to the management case',async({page})=>{
+  await page.goto('/');
+  const exception=page.getByRole('link',{name:/Open exception/i}).first();
+  await expect(exception).toBeVisible();
+  await exception.click();
+  await expect(page).toHaveURL(/\/manager$/);
+});
+
+test('simulation controls respect API minimums and explain returned risk',async({page})=>{
+  await page.goto('/simulation');
+  await expect(page.getByLabel('daily demand')).toHaveAttribute('min','1');
+  await expect(page.getByLabel('lead time')).toHaveAttribute('min','1');
+  await expect(page.getByLabel('review period')).toHaveAttribute('min','1');
+  await page.getByRole('button',{name:/RUN SIMULATION/i}).click();
+  await expect(page.getByText(/Risk classification:/i)).toBeVisible();
+});
+
+test('mobile navigation exposes state and closes with Escape',async({page},testInfo)=>{
+  test.skip(testInfo.project.name!=='mobile','Mobile drawer behavior');
+  await page.goto('/');
+  const menu=page.getByRole('button',{name:'Open navigation'});
+  await expect(menu).toHaveAttribute('aria-expanded','false');
+  await menu.click();
+  await expect(menu).toHaveAttribute('aria-expanded','true');
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveAttribute('aria-expanded','false');
 });
 
 test('dataset download endpoint returns a CSV file',async({request})=>{
