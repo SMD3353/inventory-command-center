@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 from math import sqrt
+import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlmodel import Field as SQLField, Session, SQLModel, create_engine, select
 
-DB_PATH = Path(__file__).resolve().parents[1] / "inventory_learning.db"
+DB_PATH = Path(os.environ.get("INVENTORY_DB_PATH", Path(__file__).resolve().parents[1] / "inventory_learning.db"))
 engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
 
 class Progress(SQLModel, table=True):
@@ -15,6 +16,10 @@ class Progress(SQLModel, table=True):
     status: str = "available"
     score: int = 0
     reflection: str = ""
+
+class RewardClaim(SQLModel, table=True):
+    id: int | None = SQLField(default=None, primary_key=True)
+    reward_id: int = SQLField(index=True, unique=True)
 
 class Completion(BaseModel):
     score: int = Field(ge=0, le=100)
@@ -63,6 +68,14 @@ LEARNING_MAP = [
  {"week":6,"name":"Control Tower","status":"locked","x":90,"y":25},
 ]
 
+def reward_unlocked(reward_id: int, verified: int, total_xp: int) -> bool:
+    return {
+        1: verified >= 1,
+        2: verified >= 5,
+        3: total_xp >= 450,
+        4: total_xp >= 700,
+    }.get(reward_id, False)
+
 
 def seed():
     SQLModel.metadata.create_all(engine)
@@ -88,6 +101,7 @@ def dashboard():
     seed()
     with Session(engine) as session:
         progress = {p.mission_id:p for p in session.exec(select(Progress)).all()}
+        claims = {c.reward_id for c in session.exec(select(RewardClaim)).all()}
     missions=[]
     total_xp=0
     for m in MISSIONS:
@@ -95,9 +109,14 @@ def dashboard():
         if p.status=="verified": total_xp += m["xp"]
         missions.append(row)
     verified=sum(1 for m in missions if m["status"]=="verified")
+    rewards=[]
+    for reward in REWARDS:
+        row=dict(reward)
+        row.update(unlocked=reward_unlocked(reward["id"], verified, total_xp), claimed=reward["id"] in claims)
+        rewards.append(row)
     return {
       "profile":{"name":"Mani","role":"Inventory Trainee","xp":total_xp,"level":1+total_xp//500,"streak":verified,"readiness":18+verified*3,"weekly_completed":verified},
-      "missions":missions,"competencies":COMPETENCIES,"rewards":REWARDS,"portfolio":PORTFOLIO,"manager_cases":MANAGER_CASES,"learning_map":LEARNING_MAP,
+      "missions":missions,"competencies":COMPETENCIES,"rewards":rewards,"portfolio":PORTFOLIO,"manager_cases":MANAGER_CASES,"learning_map":LEARNING_MAP,
       "alerts":[{"severity":"warning","text":"Cycle count variance exceeds tolerance in Zone C"},{"severity":"info","text":"Week 1 mission package is ready"}],
       "kpis":[{"label":"In-stock rate","value":"94.2%","delta":"-1.8%"},{"label":"Inventory accuracy","value":"91.6%","delta":"+0.7%"},{"label":"Weeks of supply","value":"7.4","delta":"+1.1"},{"label":"Open exceptions","value":"12","delta":"-3"}]
     }
@@ -114,6 +133,24 @@ def complete_mission(mission_id:int, body:Completion):
             if nxt and nxt.status=="locked": nxt.status="available"; session.add(nxt)
         session.commit(); session.refresh(p)
     return {"mission":{"id":mission_id,"status":p.status,"score":p.score}}
+
+@app.post("/api/rewards/{reward_id}/claim")
+def claim_reward(reward_id: int):
+    reward = next((r for r in REWARDS if r["id"] == reward_id), None)
+    if not reward:
+        raise HTTPException(404, "Reward not found")
+    with Session(engine) as session:
+        progress = {p.mission_id: p for p in session.exec(select(Progress)).all()}
+        verified = sum(1 for p in progress.values() if p.status == "verified")
+        total_xp = sum(m["xp"] for m in MISSIONS if progress[m["id"]].status == "verified")
+        if not reward_unlocked(reward_id, verified, total_xp):
+            raise HTTPException(409, "Reward requirements not met")
+        claim = session.exec(select(RewardClaim).where(RewardClaim.reward_id == reward_id)).first()
+        if not claim:
+            claim = RewardClaim(reward_id=reward_id)
+            session.add(claim)
+            session.commit()
+        return {"reward": {**reward, "unlocked": True, "claimed": True}}
 
 @app.post("/api/simulate")
 def simulate(body:SimulationInput):
