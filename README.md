@@ -6,7 +6,13 @@ A local-first, interactive Inventory Analyst learning platform built for Raspber
 
 ## Screenshots
 
-> Screenshot gallery coming soon. Captured screens (desktop and mobile) live in [`frontend/screenshots/`](frontend/screenshots/).
+| Command Center (desktop) | Analytics Lab (desktop) |
+|---|---|
+| ![Command Center](frontend/screenshots/desktop-command-center.png) | ![Analytics Lab](frontend/screenshots/desktop-analytics-lab.png) |
+| **Mission Workspace (desktop)** | **Command Center (mobile)** |
+| ![Mission Workspace](frontend/screenshots/desktop-functional-mission-workspace.png) | <img src="frontend/screenshots/mobile-command-center.png" alt="Command Center on mobile" width="260"> |
+
+More desktop and mobile captures are in [`frontend/screenshots/`](frontend/screenshots/).
 
 ## Architecture
 
