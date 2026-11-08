@@ -2,6 +2,37 @@
 
 A local-first, interactive Inventory Analyst learning platform built for Raspberry Pi and desktop browsers.
 
+**Why I built this:** to learn inventory analysis hands-on through missions, simulations, and analytics, in a local-first app that runs on a Raspberry Pi with no cloud account or paid API.
+
+## Screenshots
+
+> Screenshot gallery coming soon. Captured screens (desktop and mobile) live in [`frontend/screenshots/`](frontend/screenshots/).
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Frontend["frontend/ (React + TypeScript + Vite)"]
+    UI["src/App.tsx — 9 screens"]
+    E2E["e2e/ — Playwright tests"]
+  end
+  subgraph Backend["backend/ (FastAPI)"]
+    API["app/main.py — API"]
+    DB[("SQLite: inventory_learning.db")]
+    T["tests/ — pytest"]
+  end
+  CUR["curriculum/ (week-01)"]
+  UI -- HTTP/JSON --> API
+  API --> DB
+  CUR --> API
+  start["start.sh"] --> UI
+  start --> API
+```
+
+## Built with AI coding agents
+
+This project was built with AI coding agents working against an engineering contract in [`AGENTS.md`](AGENTS.md), which defines the required stack, the nine screens, product requirements, and testing expectations. I set the requirements, reviewed the output, and verified it with the unit, API, and Playwright E2E test suites below.
+
 ## Stack
 
 - React 19, TypeScript, Vite, Framer Motion, Recharts, Lucide
